@@ -5,6 +5,11 @@ import torch.nn as nn
 import torchvision
 
 
+from transformers import Wav2Vec2Model
+
+# Configuration path
+MODEL_PATH = "/users/zfne/mustun/Documents/GitHub/Dolph2Vec/dolph2vec-base/"
+
 class ResNetClassifier(nn.Module):
     def __init__(self, model_type, pretrained=False, num_classes=None, multi_label=False):
         super().__init__()
@@ -74,3 +79,23 @@ class VGGishClassifier(nn.Module):
 
         return loss, logits
 
+class wav2vec2Classifier(nn.Module):
+    def __init__(self, num_classes=None):
+        super().__init__()
+        self.wav2vec2 = Wav2Vec2Model.from_pretrained(MODEL_PATH)
+        self.classification_head = nn.Linear(768, num_classes)
+        self.loss_func = nn.CrossEntropyLoss()
+
+    def forward(self, x, y=None):
+        wav2vec2_out = self.wav2vec2(x)
+        # Extract last_hidden_state from wav2vec2 output
+        hidden_states = wav2vec2_out.last_hidden_state
+        # Take mean over sequence length dimension
+        pooled_output = torch.mean(hidden_states, dim=1)
+        logits = self.classification_head(pooled_output)
+        
+        loss = None
+        if y is not None:
+            loss = self.loss_func(logits, y)
+        
+        return loss, logits

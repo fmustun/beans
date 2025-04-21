@@ -20,7 +20,7 @@ from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from beans.metrics import Accuracy, MeanAveragePrecision
-from beans.models import ResNetClassifier, VGGishClassifier
+from beans.models import ResNetClassifier, VGGishClassifier, wav2vec2Classifier
 from beans.datasets import ClassificationDataset, RecognitionDataset
 
 
@@ -176,6 +176,19 @@ def train_pytorch_model(
                 sample_rate=sample_rate,
                 num_classes=num_labels,
                 multi_label=(args.task=='detection')).to(device)
+        elif args.model_type == 'wav2vec2':
+            model = wav2vec2Classifier(
+                num_classes=num_labels).to(device)
+            # Freeze CNN weights in wav2vec2
+            for param in model.wav2vec2.feature_extractor.parameters():
+                param.requires_grad = False
+            # Keep transformer and classification head trainable
+            for param in model.wav2vec2.encoder.parameters():
+                param.requires_grad = True
+            for param in model.classification_head.parameters():
+                param.requires_grad = True
+        else:
+            raise ValueError(f"Unknown model type: {args.model_type}")
 
         optimizer = optim.Adam(params=model.parameters(), lr=lr)
 
@@ -246,7 +259,7 @@ def main():
         'resnet18', 'resnet18-pretrained',
         'resnet50', 'resnet50-pretrained',
         'resnet152', 'resnet152-pretrained',
-        'vggish'])
+        'vggish', 'wav2vec2'])
     parser.add_argument('--dataset', choices=datasets.keys())
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--stop-shuffle', action='store_true')
@@ -266,6 +279,8 @@ def main():
         feature_type = 'vggish'
     elif args.model_type.startswith('resnet'):
         feature_type = 'melspectrogram'
+    elif args.model_type == 'wav2vec2':
+        feature_type = 'waveform'
     else:
         feature_type = 'mfcc'
 
@@ -385,7 +400,8 @@ def main():
             dataloader_valid=dataloader_valid,
             num_labels=num_labels,
             metric_factory=Metric,
-            sample_rate=dataset.get('sample_rate', 16000),
+            sample_rate=dataset.get('sample_rate', 16000), # Modified this to 44100 for wav2vec2
+            # sample_rate=dataset.get('sample_rate', 44100),
             device=device,
             log_file=log_file)
 
