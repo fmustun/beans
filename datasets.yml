@@ -1,3 +1,25 @@
+- name: dolphin_wav
+  type: classification
+  train_data: data/dolphin_wav/train.csv
+  valid_data: data/dolphin_wav/valid.csv
+  test_data: data/dolphin_wav/test.csv
+  num_labels: 10
+  labels: ["SW_Nikita", "SW_Yosefa", "SW_Nana", "SW_Luna", "NSW_9", "SW_Neo", "SW_Dana", "SW_Shy", "NSW_6", "NSW_3"]
+  unknown_label: null
+  sample_rate: 44100
+  max_duration: 2
+
+- name: drct
+  type: classification
+  train_data: data/drct/train.csv
+  valid_data: data/drct/valid.csv
+  test_data: data/drct/test.csv
+  num_labels: 10
+  labels: ["SW_Nikita", "SW_Yosefa", "SW_Nana", "SW_Luna", "NSW_9", "SW_Neo", "SW_Dana", "SW_Shy", "NSW_6", "NSW_3"]
+  unknown_label: null
+  sample_rate: 44100
+  max_duration: 5
+
 - name: esc50
   type: classification
   train_data: data/esc50/meta/esc50.train.csv

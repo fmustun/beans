@@ -7,9 +7,23 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 import torchaudio
 from beans.torchvggish import vggish_input
+import zarr
+import numpy as np
 
 FFT_SIZE_IN_SECS = 0.05
 HOP_LENGTH_IN_SECS = 0.01
+
+
+@cached(thread_safe=False, max_size=100_000)
+def _get_zarr_embedding(filename):
+    filename += ".zarr/"
+    embeddings = zarr.open(filename, mode='r')[:]
+    num_layers = 13
+    layers = np.split(embeddings, num_layers, axis=-1)
+    last_layer_embedding = layers[-1].squeeze()
+    return last_layer_embedding
+    # avg_embedding = np.mean(layer_embedding, axis=1).squeeze()
+    # return avg_embedding
 
 
 @cached(thread_safe=False, max_size=100_000)
@@ -163,6 +177,8 @@ class ClassificationDataset(Dataset):
                 max_duration=self.max_duration,
                 target_sample_rate=self.sample_rate,
                 return_mfcc=True)
+        elif self.feature_type == 'zarr':
+            x = _get_zarr_embedding(self.xs[idx])
         else:
             assert False
 

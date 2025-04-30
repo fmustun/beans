@@ -6,21 +6,23 @@ import random
 import sys
 import yaml
 
+import numpy as np
+import torch
+import torch.optim as optim
+import torch.nn.functional as F
+from aves import AVESClassifier
 from sklearn import preprocessing
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.multioutput import MultiOutputClassifier
-import torch
-import torch.optim as optim
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from beans.metrics import Accuracy, MeanAveragePrecision
-from beans.models import ResNetClassifier, VGGishClassifier, wav2vec2Classifier
+from beans.models import ResNetClassifier, VGGishClassifier, Wav2vec2Classifier_zarr, Wav2vec2Classifier, BiolingualClassifer
 from beans.datasets import ClassificationDataset, RecognitionDataset
 
 
@@ -177,16 +179,45 @@ def train_pytorch_model(
                 num_classes=num_labels,
                 multi_label=(args.task=='detection')).to(device)
         elif args.model_type == 'wav2vec2':
-            model = wav2vec2Classifier(
+            model = Wav2vec2Classifier(
                 num_classes=num_labels).to(device)
             # Freeze CNN weights in wav2vec2
+            # model.wav2vec2.freeze_feature_encoder()
             for param in model.wav2vec2.feature_extractor.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
             # Keep transformer and classification head trainable
             for param in model.wav2vec2.encoder.parameters():
                 param.requires_grad = True
             for param in model.classification_head.parameters():
                 param.requires_grad = True
+        elif args.model_type == 'wav2vec2_zarr':
+            model = Wav2vec2Classifier_zarr(
+                num_classes=num_labels).to(device)
+            # Make transformer and classification head trainable
+            for param in model.wav2vec2.encoder.parameters():
+                param.requires_grad = True
+            for param in model.classification_head.parameters():
+                param.requires_grad = True
+        elif args.model_type == 'biolingual':
+            model = BiolingualClassifier(num_classes=num_labels).to(device)
+        elif args.model_type == 'aves-bio':
+            model = AVESClassifier(
+                config_path: str | Path,
+                model_path: str | Path = None,  # or a pre-trained model path
+                num_classes=num_labels,
+                freeze_feature_extractor=True,
+                for_inference=False
+                device=device
+            ).to(device)
+        elif args.model_type == 'aves-core':
+            model = AVESClassifier(
+                config_path: str | Path,
+                model_path: str | Path = None,  # or a pre-trained model path
+                num_classes=num_labels,
+                freeze_feature_extractor=True,
+                device=device
+                for_inference=False
+            ).to(device)
         else:
             raise ValueError(f"Unknown model type: {args.model_type}")
 
@@ -259,7 +290,8 @@ def main():
         'resnet18', 'resnet18-pretrained',
         'resnet50', 'resnet50-pretrained',
         'resnet152', 'resnet152-pretrained',
-        'vggish', 'wav2vec2'])
+        'vggish',
+        'wav2vec2_zarr', 'wav2vec2', 'biolingual', "aves-bio", "aves-core"])
     parser.add_argument('--dataset', choices=datasets.keys())
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--stop-shuffle', action='store_true')
@@ -268,6 +300,16 @@ def main():
 
     torch.random.manual_seed(42)
     random.seed(42)
+
+    seed = 42
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # for multi-GPU
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
     if args.log_path:
         log_file = open(args.log_path, mode='w')
     else:
@@ -279,8 +321,10 @@ def main():
         feature_type = 'vggish'
     elif args.model_type.startswith('resnet'):
         feature_type = 'melspectrogram'
-    elif args.model_type == 'wav2vec2':
+    elif args.model_type in ['biolingual', 'wav2vec2', 'aves-bio', 'aves-core']:
         feature_type = 'waveform'
+    elif args.model_type == 'wav2vec2_zarr':
+        feature_type = 'zarr'
     else:
         feature_type = 'mfcc'
 
@@ -400,8 +444,7 @@ def main():
             dataloader_valid=dataloader_valid,
             num_labels=num_labels,
             metric_factory=Metric,
-            sample_rate=dataset.get('sample_rate', 16000), # Modified this to 44100 for wav2vec2
-            # sample_rate=dataset.get('sample_rate', 44100),
+            sample_rate=dataset.get('sample_rate', 44100),
             device=device,
             log_file=log_file)
 
