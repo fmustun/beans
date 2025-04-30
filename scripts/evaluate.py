@@ -467,7 +467,7 @@ def main():
                 device=device,
                 desc='test')
 
-        label_to_id = {lbl: i for i, lbl in enumerate(datasets['labels'])}
+        label_to_id = {i: lbl for i, lbl in enumerate(dataset['labels'])}
         for cls, (acc, total) in sorted(class_data.items()):
             print(f"Class {label_to_id[cls]}: Accuracy {acc / total:.2%} -- {total} sample", file=log_file)
 
