@@ -53,6 +53,17 @@
   sample_rate: 44100
   max_duration: 3
 
+- name: watkins-dolphins
+  type: classification
+  train_data: data/watkins/annotations.dolphins.train.csv
+  valid_data: data/watkins/annotations.dolphins.valid.csv
+  test_data: data/watkins/annotations.dolphins.test.csv
+  num_labels: 11
+  labels: ["Clymene_Dolphin", "Bottlenose_Dolphin", "Spinner_Dolphin", "White-sided_Dolphin", "White-beaked_Dolphin", "Frasers_Dolphin", "Atlantic_Spotted_Dolphin", "Rough-Toothed_Dolphin", "Pantropical_Spotted_Dolphin", "Striped_Dolphin", "Common_Dolphin"]
+  unknown_label: null
+  sample_rate: 44100
+  max_duration: 3
+
 - name: bats
   type: classification
   train_data: data/egyptian_fruit_bats/annotations.train.csv
