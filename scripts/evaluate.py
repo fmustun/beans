@@ -11,6 +11,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from aves import AVESClassifier
+from collections import Counter
 from sklearn import preprocessing
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
@@ -125,6 +126,9 @@ def eval_pytorch_model(model, dataloader, metric_factory, device, desc):
     total_loss = 0.
     steps = 0
     metric = metric_factory()
+
+    correct = Counter()
+    total = Counter()
     with torch.no_grad():
         for x, y in tqdm(dataloader, desc=desc):
             x = x.to(device)
@@ -136,9 +140,15 @@ def eval_pytorch_model(model, dataloader, metric_factory, device, desc):
 
             metric.update(logits, y)
 
+            preds = logits.argmax(axis=1)
+            for pred, gt in zip(preds, y):
+                correct[gt.item()] += (pred == gt).cpu().item()
+                total[gt.item()] += 1
+
     total_loss /= steps
 
-    return total_loss, metric.get_primary_metric()
+    class_data = {cls: (correct[cls], total[cls]) for cls in total}
+    return total_loss, metric.get_primary_metric(), class_data
 
 
 def train_pytorch_model(
@@ -249,7 +259,7 @@ def train_pytorch_model(
 
                 train_metric.update(logits, y)
 
-            valid_loss, valid_metric = eval_pytorch_model(
+            valid_loss, valid_metric, _ = eval_pytorch_model(
                 model=model,
                 dataloader=dataloader_valid,
                 metric_factory=metric_factory,
@@ -450,12 +460,16 @@ def main():
             log_file=log_file)
 
         if dataloader_test is not None:
-            _, test_metric = eval_pytorch_model(
+            _, test_metric, class_data = eval_pytorch_model(
                 model=model,
                 dataloader=dataloader_test,
                 metric_factory=Metric,
                 device=device,
                 desc='test')
+
+        label_to_id = {lbl: i for i, lbl in enumerate(datasets['labels'])}
+        for cls, (acc, total) in sorted(class_data.items()):
+            print(f"Class {label_to_id[cls]}: Accuracy {acc / total:.2%} -- {total} sample", file=log_file)
 
     print(
         'valid_metric_best = ', valid_metric_best,
