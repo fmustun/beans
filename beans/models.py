@@ -4,11 +4,14 @@ import torch
 import torch.nn as nn
 import torchvision
 
-
-from transformers import Wav2Vec2Model
+from transformers import Wav2Vec2Model, ClapModel, ClapProcessor
 
 # Configuration path
-MODEL_PATH = "/users/zfne/mustun/Documents/GitHub/Dolph2Vec/dolph2vec-base/"
+# MODEL_PATH = "/users/zfne/mustun/Documents/GitHub/Dolph2Vec/dolph2vec-base/"
+# MODEL_PATH = "dolphinteam/model-dolph2vec_type-singleCB_data-DolphinChat_version-v0"
+MODEL_PATH = "dolphinteam/model-dolph2vec_type-base_data-DolphinChat_version-v0"
+with open("/home/robertodessi/Dolph2Vec/.hf_token") as f:
+    token = f.read().strip()
 
 class ResNetClassifier(nn.Module):
     def __init__(self, model_type, pretrained=False, num_classes=None, multi_label=False):
@@ -79,10 +82,33 @@ class VGGishClassifier(nn.Module):
 
         return loss, logits
 
-class wav2vec2Classifier(nn.Module):
+class BiolingualClassifier(nn.Module):
     def __init__(self, num_classes=None):
         super().__init__()
-        self.wav2vec2 = Wav2Vec2Model.from_pretrained(MODEL_PATH)
+        self.processor = ClapProcessor.from_pretrained("davidrrobinson/BioLingual")
+        self.model = ClapModel.from_pretrained("davidrrobinson/BioLingual")
+
+        self.classification_head = nn.Linear(512, num_classes)
+        self.loss_func = nn.CrossEntropyLoss()
+
+    def forward(self, x, y=None):
+        device = x.device
+        inputs = self.processor(audios=x.cpu(), return_tensors="pt", sampling_rate=48000).to(device)
+        audio_embed = self.model.get_audio_features(**inputs)
+
+        # pooled_output = torch.mean(hidden_states, dim=1)
+        logits = self.classification_head(audio_embed)
+
+        loss = None
+        if y is not None:
+            loss = self.loss_func(logits, y)
+
+        return loss, logits
+
+class Wav2vec2Classifier(nn.Module):
+    def __init__(self, num_classes=None):
+        super().__init__()
+        self.wav2vec2 = Wav2Vec2Model.from_pretrained(MODEL_PATH, token=token, force_download=True)
         self.classification_head = nn.Linear(768, num_classes)
         self.loss_func = nn.CrossEntropyLoss()
 
@@ -93,9 +119,32 @@ class wav2vec2Classifier(nn.Module):
         # Take mean over sequence length dimension
         pooled_output = torch.mean(hidden_states, dim=1)
         logits = self.classification_head(pooled_output)
-        
+
         loss = None
         if y is not None:
             loss = self.loss_func(logits, y)
-        
+
+        return loss, logits
+
+class Wav2vec2Classifier_zarr(nn.Module):
+    def __init__(self, num_classes=None):
+        super().__init__()
+        self.wav2vec2 = Wav2Vec2Model.from_pretrained(MODEL_PATH, token=token, force_download=True)
+        self.classification_head = nn.Linear(768, num_classes)
+        self.loss_func = nn.CrossEntropyLoss()
+
+    def forward(self, x, y=None):
+        if len(x.shape) == 2:
+            x = x.unsqueeze(1)
+        wav2vec2_out = self.wav2vec2.encoder(x)
+        # Extract last_hidden_state from wav2vec2 output
+        hidden_states = wav2vec2_out.last_hidden_state
+        # Take mean over sequence length dimension
+        pooled_output = torch.mean(hidden_states, dim=1)
+        logits = self.classification_head(pooled_output)
+
+        loss = None
+        if y is not None:
+            loss = self.loss_func(logits, y)
+
         return loss, logits
