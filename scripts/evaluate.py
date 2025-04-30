@@ -22,7 +22,7 @@ from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from beans.metrics import Accuracy, MeanAveragePrecision
-from beans.models import ResNetClassifier, VGGishClassifier, Wav2vec2Classifier_zarr, Wav2vec2Classifier, BiolingualClassifer
+from beans.models import ResNetClassifier, VGGishClassifier, Wav2vec2Classifier_zarr, Wav2vec2Classifier, BiolingualClassifier
 from beans.datasets import ClassificationDataset, RecognitionDataset
 
 
@@ -202,22 +202,22 @@ def train_pytorch_model(
             model = BiolingualClassifier(num_classes=num_labels).to(device)
         elif args.model_type == 'aves-bio':
             model = AVESClassifier(
-                config_path: str | Path,
-                model_path: str | Path = None,  # or a pre-trained model path
+                config_path="/home/robertodessi/aves_models/aves_bio/aves-base-bio.torchaudio.model_config.json",
+                model_path="/home/robertodessi/aves_models/aves_bio/aves-base-bio.torchaudio.pt",
                 num_classes=num_labels,
                 freeze_feature_extractor=True,
-                for_inference=False
-                device=device
-            ).to(device)
+                for_inference=False,
+                device="cuda",
+            )
         elif args.model_type == 'aves-core':
             model = AVESClassifier(
-                config_path: str | Path,
-                model_path: str | Path = None,  # or a pre-trained model path
+                config_path="/home/robertodessi/aves_models/aves_core/aves-base-core.torchaudio.model_config.json",
+                model_path="/home/robertodessi/aves_models/aves_core/aves-base-core.torchaudio.pt",
                 num_classes=num_labels,
                 freeze_feature_extractor=True,
-                device=device
-                for_inference=False
-            ).to(device)
+                device="cuda",
+                for_inference=False,
+            )
         else:
             raise ValueError(f"Unknown model type: {args.model_type}")
 
@@ -438,13 +438,14 @@ def main():
                 metric_factory=Metric)
 
     else:
+        sample_rate = 16000 if "aves" in args.model_type else 44100
         model, valid_metric_best = train_pytorch_model(
             args=args,
             dataloader_train=dataloader_train,
             dataloader_valid=dataloader_valid,
             num_labels=num_labels,
             metric_factory=Metric,
-            sample_rate=dataset.get('sample_rate', 44100),
+            sample_rate=sample_rate, # dataset.get('sample_rate', 44100),
             device=device,
             log_file=log_file)
 
