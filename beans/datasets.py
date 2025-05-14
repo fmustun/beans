@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 import torchaudio
 from beans.torchvggish import vggish_input
-import zarr
+# import zarr
 import numpy as np
 
 FFT_SIZE_IN_SECS = 0.05

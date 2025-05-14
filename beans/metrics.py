@@ -17,6 +17,23 @@ class Accuracy:
         return self.get_metric()['acc']
 
 
+class ConfusionMatrix:
+    def __init__(self, num_classes):
+        self.num_classes = num_classes
+        self.matrix = torch.zeros((num_classes, num_classes), dtype=torch.int64)
+    
+    def update(self, logits, y):
+        preds = logits.argmax(axis=1)
+        for t, p in zip(y, preds):
+            self.matrix[t, p] += 1
+
+    def get_metric(self):
+        return {'confusion_matrix': self.matrix.numpy()}
+
+    def get_primary_metric(self):
+        return self.matrix
+
+
 class BinaryF1Score:
     def __init__(self):
         self.num_positives = 0

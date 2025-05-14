@@ -4,12 +4,14 @@ from pathlib import Path
 import pandas as pd
 from plumbum import local, FG
 import sys
+import os
 
 from beans.utils import divide_waveform_to_chunks, divide_annotation_to_chunks, get_wav_length_in_secs
 
 CHUNK_SIZE = 60     # in seconds
 TARGET_SAMPLE_RATE = 32_000
 
+os.chdir('/media/DOLPHIN1/BEANS_database')
 local['mkdir']['-p', 'data/enabirds/wav']()
 local['wget']['https://storage.googleapis.com/ml-bioacoustics-datasets/enabirds_wav.zip', '-O', 'data/enabirds/wav_Files.zip'] & FG
 local['unzip']['data/enabirds/wav_Files.zip', '-d', 'data/enabirds/'] & FG

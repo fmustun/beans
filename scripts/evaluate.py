@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-from aves import AVESClassifier
+# from aves import AVESClassifier
 from sklearn import preprocessing
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from xgboost import XGBClassifier
 
-from beans.metrics import Accuracy, MeanAveragePrecision
+from beans.metrics import Accuracy, MeanAveragePrecision, ConfusionMatrix
 from beans.models import ResNetClassifier, VGGishClassifier, Wav2vec2Classifier_zarr, Wav2vec2Classifier, BiolingualClassifier
 from beans.datasets import ClassificationDataset, RecognitionDataset
 
@@ -202,19 +202,19 @@ def train_pytorch_model(
             model = BiolingualClassifier(num_classes=num_labels).to(device)
         elif args.model_type == 'aves-bio':
             model = AVESClassifier(
-                config_path="/home/robertodessi/aves_models/aves_bio/aves-base-bio.torchaudio.model_config.json",
-                model_path="/home/robertodessi/aves_models/aves_bio/aves-base-bio.torchaudio.pt",
+                config_path="/users/zfne/mustun/Documents/GitHub/aves/aves-bio/aves-base-bio.torchaudio.model_config.json",
+                model_path="/users/zfne/mustun/Documents/GitHub/aves/aves-bio/aves-base-bio.torchaudio.pt",
                 num_classes=num_labels,
-                freeze_feature_extractor=True,
+                freeze_feature_extractor=False,
                 for_inference=False,
                 device="cuda",
             )
         elif args.model_type == 'aves-core':
             model = AVESClassifier(
-                config_path="/home/robertodessi/aves_models/aves_core/aves-base-core.torchaudio.model_config.json",
-                model_path="/home/robertodessi/aves_models/aves_core/aves-base-core.torchaudio.pt",
+                config_path="/users/zfne/mustun/Documents/GitHub/aves/aves-base-core/aves-base-core.torchaudio.model_config.json",
+                model_path="/users/zfne/mustun/Documents/GitHub/aves/aves-base-core/aves-base-core.torchaudio.pt",
                 num_classes=num_labels,
-                freeze_feature_extractor=True,
+                freeze_feature_extractor=False,
                 device="cuda",
                 for_inference=False,
             )
@@ -418,6 +418,7 @@ def main():
 
     if args.task == 'classification':
         Metric = Accuracy
+        ConfusionMatrixMetric = ConfusionMatrix
     elif args.task == 'detection':
         Metric = MeanAveragePrecision
 
@@ -436,6 +437,16 @@ def main():
                 dataloader=dataloader_test,
                 num_labels=num_labels,
                 metric_factory=Metric)
+            
+            if args.task == 'classification':
+                confusion_matrix = ConfusionMatrixMetric(num_labels)
+                _, _ = eval_sklearn_model(
+                    model_and_scaler=model_and_scaler,
+                    dataloader=dataloader_test,
+                    num_labels=num_labels,
+                    metric_factory=lambda: confusion_matrix)
+                print('Test confusion matrix:', file=log_file)
+                print(confusion_matrix.get_metric()['confusion_matrix'], file=log_file)
 
     else:
         sample_rate = 16000 if "aves" in args.model_type else 44100
@@ -456,6 +467,17 @@ def main():
                 metric_factory=Metric,
                 device=device,
                 desc='test')
+            
+            if args.task == 'classification':
+                confusion_matrix = ConfusionMatrixMetric(num_labels)
+                _, _ = eval_pytorch_model(
+                    model=model,
+                    dataloader=dataloader_test,
+                    metric_factory=lambda: confusion_matrix,
+                    device=device,
+                    desc='test')
+                print('Test confusion matrix:', file=log_file)
+                print(confusion_matrix.get_metric()['confusion_matrix'], file=log_file)
 
     print(
         'valid_metric_best = ', valid_metric_best,
