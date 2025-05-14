@@ -120,6 +120,15 @@ class ClassificationDataset(Dataset):
 
         df = pd.read_csv(metadata_path)
 
+        df["path"] = df["path"].str.replace(
+            "/lustre/fsn1/projects/rech/vzf/uqe97pu/raw_data/all_categories/",
+            # "/Volumes/jz_scratch/raw_data/all_categories/",
+            "/home/rdessi/.cache/huggingface/hub/datasets--dolphinteam--DolphinReef-labeled/snapshots/cba875a4337ad22e834e1d2c54ef8f9cc1ee66b3/",  # gcp
+            # "/Users/rdessi/.cache/huggingface/hub/datasets--dolphinteam--DolphinData-Unbalanced/snapshots/38f1d334042ff54b4877a6479b8ab759fa1263b9/",  # local
+            # "/users/zfne/mustun/.cache/huggingface/hub/datasets--dolphinteam--DolphinReef-labeled/snapshots/cba875a4337ad22e834e1d2c54ef8f9cc1ee66b3/",  # 
+            regex=False,
+        )
+
         self.xs = []
         self.ys = []
 

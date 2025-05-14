@@ -20,7 +20,7 @@ from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from beans.metrics import Accuracy, MeanAveragePrecision
-from beans.models import ResNetClassifier, VGGishClassifier
+from beans.models import ResNetClassifier, VGGishClassifier, BiolingualClassifier, AvesClassifier, Dolph2VecClassifier
 from beans.datasets import ClassificationDataset, RecognitionDataset
 
 
@@ -176,6 +176,20 @@ def train_pytorch_model(
                 sample_rate=sample_rate,
                 num_classes=num_labels,
                 multi_label=(args.task=='detection')).to(device)
+        elif args.model_type == 'biolingual':
+            model = BiolingualClassifier(
+                sample_rate=sample_rate,
+                num_classes=num_labels).to(device)
+        elif args.model_type == 'aves':
+            model = AvesClassifier(
+                sample_rate=sample_rate,
+                num_classes=num_labels).to(device)
+        elif args.model_type == 'dolph2vec':
+            model = Dolph2VecClassifier(
+                sample_rate=sample_rate,
+                num_classes=num_labels).to(device)
+            # Freeze feature encoder
+            model.model.freeze_feature_encoder()
 
         optimizer = optim.Adam(params=model.parameters(), lr=lr)
 
@@ -246,7 +260,7 @@ def main():
         'resnet18', 'resnet18-pretrained',
         'resnet50', 'resnet50-pretrained',
         'resnet152', 'resnet152-pretrained',
-        'vggish'])
+        'vggish', 'biolingual', 'aves', 'dolph2vec'])
     parser.add_argument('--dataset', choices=datasets.keys())
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--stop-shuffle', action='store_true')
@@ -266,11 +280,15 @@ def main():
         feature_type = 'vggish'
     elif args.model_type.startswith('resnet'):
         feature_type = 'melspectrogram'
+    elif args.model_type in ['biolingual', 'aves', 'dolph2vec']:
+        feature_type = 'waveform'
     else:
         feature_type = 'mfcc'
 
     dataset = datasets[args.dataset]
     num_labels = dataset['num_labels']
+
+    sample_rate = dataset['sample_rate'] if args.model_type != 'biolingual' else 48000
 
     if dataset['type'] == 'classification':
         dataset_train = ClassificationDataset(
@@ -278,7 +296,7 @@ def main():
             num_labels=num_labels,
             labels=dataset['labels'],
             unknown_label=dataset['unknown_label'],
-            sample_rate=dataset['sample_rate'],
+            sample_rate=sample_rate,
             max_duration=dataset['max_duration'],
             feature_type=feature_type)
         dataset_valid = ClassificationDataset(
@@ -286,7 +304,7 @@ def main():
             num_labels=num_labels,
             labels=dataset['labels'],
             unknown_label=dataset['unknown_label'],
-            sample_rate=dataset['sample_rate'],
+            sample_rate=sample_rate,
             max_duration=dataset['max_duration'],
             feature_type=feature_type)
         dataset_test = ClassificationDataset(
@@ -294,7 +312,7 @@ def main():
             num_labels=num_labels,
             labels=dataset['labels'],
             unknown_label=dataset['unknown_label'],
-            sample_rate=dataset['sample_rate'],
+            sample_rate=sample_rate,
             max_duration=dataset['max_duration'],
             feature_type=feature_type)
 
