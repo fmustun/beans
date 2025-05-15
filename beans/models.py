@@ -92,7 +92,6 @@ class BiolingualClassifier(nn.Module):
         self.loss_func = nn.CrossEntropyLoss()
 
     def __call__(self, x, y=None):
-        breakpoint()
         device = x.device
         x = x.cpu().numpy()
 
