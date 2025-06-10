@@ -189,7 +189,7 @@ def train_pytorch_model(
                 sample_rate=sample_rate,
                 num_classes=num_labels).to(device)
             # Freeze feature encoder
-            model.model.freeze_feature_encoder()
+            # model.model.freeze_feature_encoder()
 
         optimizer = optim.Adam(params=model.parameters(), lr=lr)
 
