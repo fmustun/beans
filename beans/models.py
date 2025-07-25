@@ -88,6 +88,9 @@ class BiolingualClassifier(nn.Module):
         super().__init__()
         self.processor = ClapProcessor.from_pretrained("davidrrobinson/biolingual")
         self.model = ClapModel.from_pretrained("davidrrobinson/biolingual")
+        # Freeze CLAP model parameters
+        for param in self.model.parameters():
+            param.requires_grad = False
         self.linear = nn.Linear(in_features=512, out_features=num_classes)
         self.loss_func = nn.CrossEntropyLoss()
 
@@ -130,7 +133,7 @@ class Dolph2VecClassifier(nn.Module):
     def __init__(self, sample_rate, num_classes=None):
         super().__init__()
         self.feature_extractor = Wav2Vec2FeatureExtractor.from_json_file(
-            "/home/rdessi/Dolph2Vec/preprocessor_dolphin.json",
+            "/users/zfne/mustun/Documents/GitHub/Dolph2Vec/dolph2vec-base/preprocessor_dolphin.json",
         )
 
         self.model = Wav2Vec2Model.from_pretrained(
@@ -158,7 +161,8 @@ class Dolph2VecClassifier(nn.Module):
         features = features.to(device)
 
         out = self.model(features, output_hidden_states=True)
-        logits = out.hidden_states[-1].mean(1)
+        pooled = out.hidden_states[-1].mean(1)
+        logits = self.linear(pooled)
 
         loss = None
         if y is not None:
