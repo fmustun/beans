@@ -1,5 +1,16 @@
 data/
 
+# Model files (large files that exceed GitHub's 100MB limit)
+*.pth
+*.pkl
+*.h5
+*.hdf5
+*.onnx
+*.pb
+*.tflite
+*.pt
+*.safetensors
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
