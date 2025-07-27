@@ -84,13 +84,20 @@ class VGGishClassifier(nn.Module):
 
 
 class BiolingualClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None, hidden_dim=256, dropout=0.1, classifier_type='mlp'):
+    def __init__(self, sample_rate, num_classes=None, hidden_dim=256, dropout=0.1, classifier_type='mlp', freeze_feature_encoder=False):
         super().__init__()
         self.processor = ClapProcessor.from_pretrained("davidrrobinson/biolingual")
         self.model = ClapModel.from_pretrained("davidrrobinson/biolingual")
-        # Freeze CLAP model parameters
-        for param in self.model.parameters():
-            param.requires_grad = False
+        
+        # Freeze/unfreeze CLAP model parameters based on argument
+        if freeze_feature_encoder:
+            print("Freezing Biolingual feature encoder")
+            for param in self.model.parameters():
+                param.requires_grad = False
+        else:
+            print("Training Biolingual feature encoder")
+            for param in self.model.parameters():
+                param.requires_grad = True
         
         input_dim = 512  # CLAP audio feature dimension
         
@@ -128,17 +135,16 @@ class BiolingualClassifier(nn.Module):
 
 
 class AvesClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None, hidden_dim=512, dropout=0.1, classifier_type='mlp'):
+    def __init__(self, sample_rate, num_classes=None, hidden_dim=512, dropout=0.1, classifier_type='mlp', freeze_feature_encoder=False):
         super().__init__()
         
         # Import the feature extractor from aves
         from aves import load_feature_extractor
         
-        freeze_feature_extractor = True
-        if freeze_feature_extractor:
-            print("Freezing feature extractor")
+        if freeze_feature_encoder:
+            print("Freezing AVES feature encoder")
         else:
-            print("Training feature extractor")
+            print("Training AVES feature encoder")
 
         # Load the AVES feature extractor (without classifier)
         self.feature_extractor = load_feature_extractor(
@@ -149,7 +155,7 @@ class AvesClassifier(nn.Module):
         )
         
         # Freeze the feature extractor if needed
-        if freeze_feature_extractor:
+        if freeze_feature_encoder:
             for param in self.feature_extractor.parameters():
                 param.requires_grad = False
         
@@ -190,7 +196,7 @@ class AvesClassifier(nn.Module):
 
 
 class Dolph2VecClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None, variant='base', hidden_dim=512, dropout=0.1, classifier_type='mlp'):
+    def __init__(self, sample_rate, num_classes=None, variant='base', hidden_dim=512, dropout=0.1, classifier_type='mlp', freeze_feature_encoder=False):
         super().__init__()
         
         # Define model variants
@@ -211,6 +217,13 @@ class Dolph2VecClassifier(nn.Module):
         preprocessor_path = "/users/zfne/mustun/Documents/GitHub/Dolph2Vec/dolph2vec-base/preprocessor_config.json"
         self.feature_extractor = Wav2Vec2FeatureExtractor.from_json_file(preprocessor_path)
         self.model = Wav2Vec2Model.from_pretrained(dolph2vec_model)
+
+        # Freeze/unfreeze feature encoder based on argument
+        if freeze_feature_encoder:
+            print("Freezing Dolph2Vec feature encoder")
+            self.model.freeze_feature_encoder()
+        else:
+            print("Training Dolph2Vec feature encoder")
 
         input_dim = 768  # Dolph2Vec hidden size
         
