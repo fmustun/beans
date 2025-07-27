@@ -181,7 +181,8 @@ def train_pytorch_model(
     metric_factory,
     sample_rate,
     device,
-    log_file):
+    log_file,
+    freeze_feature_encoder):
 
     lrs = ast.literal_eval(args.lrs)
     assert isinstance(lrs, list)
@@ -213,11 +214,13 @@ def train_pytorch_model(
         elif args.model_type == 'biolingual':
             model = BiolingualClassifier(
                 sample_rate=sample_rate,
-                num_classes=num_labels).to(device)
+                num_classes=num_labels,
+                freeze_feature_encoder=freeze_feature_encoder).to(device)
         elif args.model_type == 'aves':
             model = AvesClassifier(
                 sample_rate=sample_rate,
-                num_classes=num_labels).to(device)
+                num_classes=num_labels,
+                freeze_feature_encoder=freeze_feature_encoder).to(device)
         elif args.model_type == 'dolph2vec':
             # Validate that dolph2vec-variant is provided when using dolph2vec
             if not args.dolph2vec_variant:
@@ -226,13 +229,8 @@ def train_pytorch_model(
             model = Dolph2VecClassifier(
                 sample_rate=sample_rate,
                 num_classes=num_labels,
-                variant=args.dolph2vec_variant).to(device)
-            freeze_feature_encoder = True # Change this to train/freeze feature encoder
-            if freeze_feature_encoder:
-                print("Freezing feature encoder")
-                model.model.freeze_feature_encoder()
-            else:
-                print("Training feature encoder")
+                variant=args.dolph2vec_variant,
+                freeze_feature_encoder=freeze_feature_encoder).to(device)
 
         optimizer = optim.Adam(params=model.parameters(), lr=lr)
 
@@ -306,6 +304,10 @@ def main():
         'vggish', 'biolingual', 'aves', 'dolph2vec'])
     parser.add_argument('--dolph2vec-variant', choices=['base', '32', '128', 'clean'], 
                        help='Dolph2Vec model variant (only used when model-type is dolph2vec)')
+    parser.add_argument('--freeze-feature-encoder', action='store_true', default=False,
+                       help='Freeze the feature encoder (default: False)')
+    parser.add_argument('--train-feature-encoder', action='store_true', default=True,
+                       help='Train the feature encoder (default: True)')
     parser.add_argument('--dataset', choices=datasets.keys())
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--stop-shuffle', action='store_true')
@@ -322,6 +324,10 @@ def main():
     
     # Log the seed used
     print(f"Using seed: {args.seed}", file=log_file)
+    
+    # Determine feature encoder freezing behavior
+    freeze_feature_encoder = args.freeze_feature_encoder and not args.train_feature_encoder
+    print(f"Feature encoder freezing: {freeze_feature_encoder}", file=log_file)
 
     device = torch.device('cuda:0')
 
@@ -459,7 +465,8 @@ def main():
             metric_factory=Metric,
             sample_rate=dataset.get('sample_rate', 16000),
             device=device,
-            log_file=log_file)
+            log_file=log_file,
+            freeze_feature_encoder=freeze_feature_encoder)
 
         if dataloader_test is not None:
             _, test_metric = eval_pytorch_model(

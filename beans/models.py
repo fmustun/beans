@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torchvision
 
-#from aves import AVESClassifier
+from aves import AVESClassifier
 from transformers import (
     ClapModel,
     ClapProcessor,
@@ -84,13 +84,21 @@ class VGGishClassifier(nn.Module):
 
 
 class BiolingualClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None):
+    def __init__(self, sample_rate, num_classes=None, freeze_feature_encoder=False):
         super().__init__()
         self.processor = ClapProcessor.from_pretrained("davidrrobinson/biolingual")
         self.model = ClapModel.from_pretrained("davidrrobinson/biolingual")
-        # Freeze CLAP model parameters
-        for param in self.model.parameters():
-            param.requires_grad = False
+        
+        # Freeze/unfreeze CLAP model parameters based on argument
+        if freeze_feature_encoder:
+            print("Freezing Biolingual feature encoder")
+            for param in self.model.parameters():
+                param.requires_grad = False
+        else:
+            print("Training Biolingual feature encoder")
+            for param in self.model.parameters():
+                param.requires_grad = True
+                
         self.linear = nn.Linear(in_features=512, out_features=num_classes)
         self.loss_func = nn.CrossEntropyLoss()
 
@@ -112,19 +120,19 @@ class BiolingualClassifier(nn.Module):
 
 
 class AvesClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None):
+    def __init__(self, sample_rate, num_classes=None, freeze_feature_encoder=False):
         super().__init__()
-        freeze_feature_extractor = True
-        if freeze_feature_extractor:
-            print("Freezing feature extractor")
+        
+        if freeze_feature_encoder:
+            print("Freezing AVES feature encoder")
         else:
-            print("Training feature extractor")
+            print("Training AVES feature encoder")
 
         self.model = AVESClassifier(
             config_path="/users/zfne/mustun/Documents/GitHub/aves/aves-bio/aves-base-bio.torchaudio.model_config.json",
             model_path="/users/zfne/mustun/Documents/GitHub/aves/aves-bio/aves-base-bio.torchaudio.pt",
             num_classes=num_classes,
-            freeze_feature_extractor=freeze_feature_extractor,
+            freeze_feature_extractor=freeze_feature_encoder,
             device="cuda" if torch.cuda.is_available() else "cpu",
             for_inference=False,
         )
@@ -135,7 +143,7 @@ class AvesClassifier(nn.Module):
 
 
 class Dolph2VecClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None, variant='base'):
+    def __init__(self, sample_rate, num_classes=None, variant='base', freeze_feature_encoder=False):
         super().__init__()
         
         # Define model variants
@@ -156,6 +164,13 @@ class Dolph2VecClassifier(nn.Module):
         preprocessor_path = "/users/zfne/mustun/Documents/GitHub/Dolph2Vec/dolph2vec-base/preprocessor_config.json"
         self.feature_extractor = Wav2Vec2FeatureExtractor.from_json_file(preprocessor_path)
         self.model = Wav2Vec2Model.from_pretrained(dolph2vec_model)
+
+        # Freeze/unfreeze feature encoder based on argument
+        if freeze_feature_encoder:
+            print("Freezing Dolph2Vec feature encoder")
+            self.model.freeze_feature_encoder()
+        else:
+            print("Training Dolph2Vec feature encoder")
 
         self.linear = nn.Linear(in_features=768, out_features=num_classes)
         self.loss_func = nn.CrossEntropyLoss()
