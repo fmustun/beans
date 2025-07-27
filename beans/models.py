@@ -154,25 +154,26 @@ class AvesClassifier(nn.Module):
             for_inference=False,
         )
         
+        # Get the correct embedding dimension from the model config
+        embeddings_dim = self.feature_extractor.config.get("encoder_embed_dim", 768)
+        print(f"AVES embedding dimension: {embeddings_dim}")
+        
         # Freeze the feature extractor if needed
         if freeze_feature_encoder:
             for param in self.feature_extractor.parameters():
                 param.requires_grad = False
         
-        # AVES typically outputs 512-dimensional features
-        input_dim = 512
-        
         if classifier_type == 'mlp':
             # MLP classifier
             self.classifier = nn.Sequential(
-                nn.Linear(input_dim, hidden_dim),
+                nn.Linear(embeddings_dim, hidden_dim),
                 nn.ReLU(),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_dim, num_classes)
             )
         elif classifier_type == 'linear':
             # Linear classifier
-            self.classifier = nn.Linear(input_dim, num_classes)
+            self.classifier = nn.Linear(embeddings_dim, num_classes)
         else:
             raise ValueError(f"Unknown classifier type: {classifier_type}. Use 'mlp' or 'linear'")
             
@@ -181,8 +182,9 @@ class AvesClassifier(nn.Module):
 
     def __call__(self, x, y=None):
         # Extract features using AVES feature extractor
+        # The feature extractor returns features of shape (batch_size, sequence_length, embedding_dim)
         features = self.feature_extractor.extract_features(x, layers=-1)
-        # Average over time dimension
+        # Average over time dimension to get (batch_size, embedding_dim)
         pooled_features = features.mean(dim=1)
         
         # Apply our classifier
