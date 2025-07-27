@@ -5,6 +5,8 @@ import itertools
 import random
 import sys
 import yaml
+import os
+import numpy as np
 
 from sklearn import preprocessing
 from sklearn.ensemble import GradientBoostingClassifier
@@ -22,6 +24,38 @@ from xgboost import XGBClassifier
 from beans.metrics import Accuracy, MeanAveragePrecision
 from beans.models import ResNetClassifier, VGGishClassifier, BiolingualClassifier, AvesClassifier, Dolph2VecClassifier
 from beans.datasets import ClassificationDataset, RecognitionDataset
+
+
+def set_all_seeds(seed=42):
+    """
+    Set all possible seeds for reproducibility.
+    
+    Args:
+        seed (int): The seed value to use for all random generators
+    """
+    # Python random
+    random.seed(seed)
+    
+    # NumPy
+    np.random.seed(seed)
+    
+    # PyTorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if using multi-GPU
+    
+    # PyTorch deterministic algorithms
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # Set environment variable for CUDA
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+    
+    # For XGBoost
+    os.environ['XGBOOST_RANDOM_STATE'] = str(seed)
+    
+    print(f"All seeds set to {seed} for reproducibility")
 
 
 def read_datasets(path):
@@ -185,11 +219,20 @@ def train_pytorch_model(
                 sample_rate=sample_rate,
                 num_classes=num_labels).to(device)
         elif args.model_type == 'dolph2vec':
+            # Validate that dolph2vec-variant is provided when using dolph2vec
+            if not args.dolph2vec_variant:
+                raise ValueError("--dolph2vec-variant must be specified when using dolph2vec model type")
+            
             model = Dolph2VecClassifier(
                 sample_rate=sample_rate,
-                num_classes=num_labels).to(device)
-            # Freeze feature encoder
-            # model.model.freeze_feature_encoder()
+                num_classes=num_labels,
+                variant=args.dolph2vec_variant).to(device)
+            freeze_feature_encoder = True # Change this to train/freeze feature encoder
+            if freeze_feature_encoder:
+                print("Freezing feature encoder")
+                model.model.freeze_feature_encoder()
+            else:
+                print("Training feature encoder")
 
         optimizer = optim.Adam(params=model.parameters(), lr=lr)
 
@@ -261,18 +304,24 @@ def main():
         'resnet50', 'resnet50-pretrained',
         'resnet152', 'resnet152-pretrained',
         'vggish', 'biolingual', 'aves', 'dolph2vec'])
+    parser.add_argument('--dolph2vec-variant', choices=['base', '32', '128', 'clean'], 
+                       help='Dolph2Vec model variant (only used when model-type is dolph2vec)')
     parser.add_argument('--dataset', choices=datasets.keys())
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--stop-shuffle', action='store_true')
     parser.add_argument('--log-path', type=str)
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     args = parser.parse_args()
 
-    torch.random.manual_seed(42)
-    random.seed(42)
+    # Set all seeds for reproducibility
+    set_all_seeds(args.seed)
     if args.log_path:
         log_file = open(args.log_path, mode='w')
     else:
         log_file = sys.stderr
+    
+    # Log the seed used
+    print(f"Using seed: {args.seed}", file=log_file)
 
     device = torch.device('cuda:0')
 
@@ -350,13 +399,18 @@ def main():
     else:
         raise ValueError(f"Invalid dataset type: {dataset['type']}")
 
+    # Set generator for reproducible shuffling
+    generator = torch.Generator()
+    generator.manual_seed(args.seed)
+    
     dataloader_train = DataLoader(
         dataset=dataset_train,
         batch_size=args.batch_size,
         shuffle=not args.stop_shuffle,
         num_workers=args.num_workers,
         pin_memory=True,
-        persistent_workers=True)
+        persistent_workers=True,
+        generator=generator)
     dataloader_valid = DataLoader(
         dataset=dataset_valid,
         batch_size=args.batch_size,

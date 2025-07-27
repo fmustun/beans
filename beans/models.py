@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torchvision
 
-from aves import AVESClassifier
+#from aves import AVESClassifier
 from transformers import (
     ClapModel,
     ClapProcessor,
@@ -114,12 +114,17 @@ class BiolingualClassifier(nn.Module):
 class AvesClassifier(nn.Module):
     def __init__(self, sample_rate, num_classes=None):
         super().__init__()
+        freeze_feature_extractor = True
+        if freeze_feature_extractor:
+            print("Freezing feature extractor")
+        else:
+            print("Training feature extractor")
 
         self.model = AVESClassifier(
-            config_path="/home/rdessi/Dolph2Vec/aves_models/aves_bio/aves-base-bio.torchaudio.model_config.json",
-            model_path="/home/rdessi/Dolph2Vec/aves_models/aves_bio/aves-base-bio.torchaudio.pt",
+            config_path="/users/zfne/mustun/Documents/GitHub/aves/aves-bio/aves-base-bio.torchaudio.model_config.json",
+            model_path="/users/zfne/mustun/Documents/GitHub/aves/aves-bio/aves-base-bio.torchaudio.pt",
             num_classes=num_classes,
-            freeze_feature_extractor=True,
+            freeze_feature_extractor=freeze_feature_extractor,
             device="cuda" if torch.cuda.is_available() else "cpu",
             for_inference=False,
         )
@@ -130,15 +135,27 @@ class AvesClassifier(nn.Module):
 
 
 class Dolph2VecClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None):
+    def __init__(self, sample_rate, num_classes=None, variant='base'):
         super().__init__()
-        self.feature_extractor = Wav2Vec2FeatureExtractor.from_json_file(
-            "/users/zfne/mustun/Documents/GitHub/Dolph2Vec/dolph2vec-base/preprocessor_dolphin.json",
-        )
-
-        self.model = Wav2Vec2Model.from_pretrained(
-            "dolphinteam/model-dolph2vec_type-base_data-DolphinChat_version-v0",
-        )
+        
+        # Define model variants
+        model_variants = {
+            'base': "dolphinteam/model-dolph2vec_type-base_data-DolphinChat_version-v0",
+            '32': "dolphinteam/model-dolph2vec_type-cb_32_data-DolphinChat",
+            '128': "dolphinteam/model-dolph2vec_type-cb_128_data-DolphinChat",
+            'clean': "dolphinteam/model-dolph2vec_type-clean_data-DolphinChat"
+        }
+        
+        if variant not in model_variants:
+            raise ValueError(f"Unknown Dolph2Vec variant: {variant}. Available variants: {list(model_variants.keys())}")
+        
+        dolph2vec_model = model_variants[variant]
+        print(f"Using Dolph2Vec model: {dolph2vec_model}")
+        
+        # Use the same preprocessor for all variants
+        preprocessor_path = "/users/zfne/mustun/Documents/GitHub/Dolph2Vec/dolph2vec-base/preprocessor_config.json"
+        self.feature_extractor = Wav2Vec2FeatureExtractor.from_json_file(preprocessor_path)
+        self.model = Wav2Vec2Model.from_pretrained(dolph2vec_model)
 
         self.linear = nn.Linear(in_features=768, out_features=num_classes)
         self.loss_func = nn.CrossEntropyLoss()
