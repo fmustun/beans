@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torchvision
 
-#from aves import AVESClassifier
+# from aves import AVESClassifier  # No longer needed, we use load_feature_extractor instead
 from transformers import (
     ClapModel,
     ClapProcessor,
@@ -84,14 +84,30 @@ class VGGishClassifier(nn.Module):
 
 
 class BiolingualClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None):
+    def __init__(self, sample_rate, num_classes=None, hidden_dim=256, dropout=0.1, classifier_type='mlp'):
         super().__init__()
         self.processor = ClapProcessor.from_pretrained("davidrrobinson/biolingual")
         self.model = ClapModel.from_pretrained("davidrrobinson/biolingual")
         # Freeze CLAP model parameters
         for param in self.model.parameters():
             param.requires_grad = False
-        self.linear = nn.Linear(in_features=512, out_features=num_classes)
+        
+        input_dim = 512  # CLAP audio feature dimension
+        
+        if classifier_type == 'mlp':
+            # MLP classifier
+            self.classifier = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, num_classes)
+            )
+        elif classifier_type == 'linear':
+            # Linear classifier
+            self.classifier = nn.Linear(input_dim, num_classes)
+        else:
+            raise ValueError(f"Unknown classifier type: {classifier_type}. Use 'mlp' or 'linear'")
+            
         self.loss_func = nn.CrossEntropyLoss()
 
     def __call__(self, x, y=None):
@@ -102,7 +118,7 @@ class BiolingualClassifier(nn.Module):
         inputs = processed["input_features"].to(device)
 
         outputs = self.model.get_audio_features(input_features=inputs)
-        logits = self.linear(outputs)
+        logits = self.classifier(outputs)
 
         loss = None
         if y is not None:
@@ -112,30 +128,69 @@ class BiolingualClassifier(nn.Module):
 
 
 class AvesClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None):
+    def __init__(self, sample_rate, num_classes=None, hidden_dim=512, dropout=0.1, classifier_type='mlp'):
         super().__init__()
+        
+        # Import the feature extractor from aves
+        from aves import load_feature_extractor
+        
         freeze_feature_extractor = True
         if freeze_feature_extractor:
             print("Freezing feature extractor")
         else:
             print("Training feature extractor")
 
-        self.model = AVESClassifier(
+        # Load the AVES feature extractor (without classifier)
+        self.feature_extractor = load_feature_extractor(
             config_path="/users/zfne/mustun/Documents/GitHub/aves/aves-bio/aves-base-bio.torchaudio.model_config.json",
             model_path="/users/zfne/mustun/Documents/GitHub/aves/aves-bio/aves-base-bio.torchaudio.pt",
-            num_classes=num_classes,
-            freeze_feature_extractor=freeze_feature_extractor,
             device="cuda" if torch.cuda.is_available() else "cpu",
             for_inference=False,
         )
+        
+        # Freeze the feature extractor if needed
+        if freeze_feature_extractor:
+            for param in self.feature_extractor.parameters():
+                param.requires_grad = False
+        
+        # AVES typically outputs 512-dimensional features
+        input_dim = 512
+        
+        if classifier_type == 'mlp':
+            # MLP classifier
+            self.classifier = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, num_classes)
+            )
+        elif classifier_type == 'linear':
+            # Linear classifier
+            self.classifier = nn.Linear(input_dim, num_classes)
+        else:
+            raise ValueError(f"Unknown classifier type: {classifier_type}. Use 'mlp' or 'linear'")
+            
+        self.loss_func = nn.CrossEntropyLoss()
+        self.sample_rate = sample_rate
 
     def __call__(self, x, y=None):
-        loss, logits = self.model(x, y)
+        # Extract features using AVES feature extractor
+        features = self.feature_extractor.extract_features(x, layers=-1)
+        # Average over time dimension
+        pooled_features = features.mean(dim=1)
+        
+        # Apply our classifier
+        logits = self.classifier(pooled_features)
+        
+        loss = None
+        if y is not None:
+            loss = self.loss_func(logits, y)
+            
         return loss, logits
 
 
 class Dolph2VecClassifier(nn.Module):
-    def __init__(self, sample_rate, num_classes=None, variant='base'):
+    def __init__(self, sample_rate, num_classes=None, variant='base', hidden_dim=512, dropout=0.1, classifier_type='mlp'):
         super().__init__()
         
         # Define model variants
@@ -157,7 +212,22 @@ class Dolph2VecClassifier(nn.Module):
         self.feature_extractor = Wav2Vec2FeatureExtractor.from_json_file(preprocessor_path)
         self.model = Wav2Vec2Model.from_pretrained(dolph2vec_model)
 
-        self.linear = nn.Linear(in_features=768, out_features=num_classes)
+        input_dim = 768  # Dolph2Vec hidden size
+        
+        if classifier_type == 'mlp':
+            # MLP classifier
+            self.classifier = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, num_classes)
+            )
+        elif classifier_type == 'linear':
+            # Linear classifier
+            self.classifier = nn.Linear(input_dim, num_classes)
+        else:
+            raise ValueError(f"Unknown classifier type: {classifier_type}. Use 'mlp' or 'linear'")
+            
         self.loss_func = nn.CrossEntropyLoss()
 
         self.sample_rate = sample_rate
@@ -179,7 +249,7 @@ class Dolph2VecClassifier(nn.Module):
 
         out = self.model(features, output_hidden_states=True)
         pooled = out.hidden_states[-1].mean(1)
-        logits = self.linear(pooled)
+        logits = self.classifier(pooled)
 
         loss = None
         if y is not None:

@@ -211,22 +211,28 @@ def train_pytorch_model(
                 num_classes=num_labels,
                 multi_label=(args.task=='detection')).to(device)
         elif args.model_type == 'biolingual':
+            print(f"Creating BiolingualClassifier with {args.classifier_type} classifier", file=log_file)
             model = BiolingualClassifier(
                 sample_rate=sample_rate,
-                num_classes=num_labels).to(device)
+                num_classes=num_labels,
+                classifier_type=args.classifier_type).to(device)
         elif args.model_type == 'aves':
+            print(f"Creating AvesClassifier with {args.classifier_type} classifier", file=log_file)
             model = AvesClassifier(
                 sample_rate=sample_rate,
-                num_classes=num_labels).to(device)
+                num_classes=num_labels,
+                classifier_type=args.classifier_type).to(device)
         elif args.model_type == 'dolph2vec':
             # Validate that dolph2vec-variant is provided when using dolph2vec
             if not args.dolph2vec_variant:
                 raise ValueError("--dolph2vec-variant must be specified when using dolph2vec model type")
             
+            print(f"Creating Dolph2VecClassifier with {args.classifier_type} classifier", file=log_file)
             model = Dolph2VecClassifier(
                 sample_rate=sample_rate,
                 num_classes=num_labels,
-                variant=args.dolph2vec_variant).to(device)
+                variant=args.dolph2vec_variant,
+                classifier_type=args.classifier_type).to(device)
             freeze_feature_encoder = True # Change this to train/freeze feature encoder
             if freeze_feature_encoder:
                 print("Freezing feature encoder")
@@ -306,6 +312,8 @@ def main():
         'vggish', 'biolingual', 'aves', 'dolph2vec'])
     parser.add_argument('--dolph2vec-variant', choices=['base', '32', '128', 'clean'], 
                        help='Dolph2Vec model variant (only used when model-type is dolph2vec)')
+    parser.add_argument('--classifier-type', choices=['mlp', 'linear'], default='mlp',
+                       help='Type of classifier head to use (mlp or linear)')
     parser.add_argument('--dataset', choices=datasets.keys())
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--stop-shuffle', action='store_true')
@@ -322,6 +330,7 @@ def main():
     
     # Log the seed used
     print(f"Using seed: {args.seed}", file=log_file)
+    print(f"Using classifier type: {args.classifier_type}", file=log_file)
 
     device = torch.device('cuda:0')
 
