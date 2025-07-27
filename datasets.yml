@@ -1,10 +1,21 @@
+- name: dr_binary_detection
+  type: classification
+  train_data: /media/DOLPHIN/Analyses_alexis/other_stuff/Detection_datasets_wav_files/train.csv
+  valid_data: /media/DOLPHIN/Analyses_alexis/other_stuff/Detection_datasets_wav_files/valid.csv
+  test_data: /media/DOLPHIN/Analyses_alexis/other_stuff/Detection_datasets_wav_files/test.csv
+  num_labels: 2
+  labels: [0,1]
+  unknown_label: null
+  sample_rate: 44100
+  max_duration: 3
+
 - name: dolphin_reef
   type: classification
-  train_data: data/dolphin_reef/balanced/fine-tuning/train.csv
-  valid_data: data/dolphin_reef/balanced/fine-tuning/valid.csv
-  test_data: data/dolphin_reef/balanced/fine-tuning/test.csv
-  num_labels: 10
-  labels: ['SW_Yosefa', 'SW_Luna', 'SW_Nikita', 'SW_Neo', 'SW_Nana', 'NSW_9']
+  train_data: data/dolphin_reef/unbalanced_SW_NSW/train.csv
+  valid_data: data/dolphin_reef/unbalanced_SW_NSW/valid.csv
+  test_data: data/dolphin_reef/unbalanced_SW_NSW/test.csv
+  num_labels: 8
+  labels: ['SW_Yosefa', 'SW_Luna', 'SW_Nikita', 'SW_Neo', 'SW_Nana', 'SW_Shy', 'SW_Dana',  'NSW']
   unknown_label: null
   sample_rate: 44100
   max_duration: 3

@@ -5,6 +5,7 @@ import itertools
 import random
 import sys
 import yaml
+import os
 
 from sklearn import preprocessing
 from sklearn.ensemble import GradientBoostingClassifier
@@ -185,9 +186,20 @@ def train_pytorch_model(
                 sample_rate=sample_rate,
                 num_classes=num_labels).to(device)
         elif args.model_type == 'dolph2vec':
+            # Compute class weights for unbalanced classes
+            from sklearn.utils.class_weight import compute_class_weight
+            import numpy as np
+            labels_list = []
+            for _, y in dataloader_train:
+                labels_list.extend(y.cpu().numpy().tolist())
+            labels_array = np.array(labels_list)
+            class_weights = compute_class_weight('balanced', classes=np.arange(num_labels), y=labels_array)
+            weights = torch.tensor(class_weights, dtype=torch.float).to(device)
             model = Dolph2VecClassifier(
                 sample_rate=sample_rate,
-                num_classes=num_labels).to(device)
+                num_classes=num_labels,
+                class_weights=weights
+            ).to(device)
             # Freeze feature encoder
             model.model.freeze_feature_encoder()
 
@@ -265,6 +277,7 @@ def main():
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--stop-shuffle', action='store_true')
     parser.add_argument('--log-path', type=str)
+    parser.add_argument('--save-model', type=str, help='Path to save the best model')
     args = parser.parse_args()
 
     torch.random.manual_seed(42)
@@ -396,6 +409,27 @@ def main():
                 num_labels=num_labels,
                 metric_factory=Metric)
 
+        # Save sklearn model if requested
+        if args.save_model and args.model_type in {'lr', 'svm', 'decisiontree', 'gbdt', 'xgboost'}:
+            import joblib
+            os.makedirs(os.path.dirname(args.save_model), exist_ok=True)
+            
+            # Save both model and scaler
+            joblib.dump({
+                'model': model_and_scaler[0],
+                'scaler': model_and_scaler[1],
+                'valid_metric': valid_metric_best,
+                'test_metric': test_metric,
+                'model_type': args.model_type,
+                'dataset': args.dataset,
+                'task': args.task,
+                'num_labels': num_labels
+            }, args.save_model)
+            
+            print(f'Best sklearn model saved to: {args.save_model}', file=log_file)
+            print(f'Validation metric: {valid_metric_best}', file=log_file)
+            print(f'Test metric: {test_metric}', file=log_file)
+
     else:
         model, valid_metric_best = train_pytorch_model(
             args=args,
@@ -419,6 +453,27 @@ def main():
         'valid_metric_best = ', valid_metric_best,
         'test_metric = ', test_metric,
         file=log_file)
+
+    # Save the best model if requested
+    if args.save_model and args.model_type not in {'lr', 'svm', 'decisiontree', 'gbdt', 'xgboost'}:
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(args.save_model), exist_ok=True)
+        
+        # Save the model
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'valid_metric': valid_metric_best,
+            'test_metric': test_metric,
+            'model_type': args.model_type,
+            'dataset': args.dataset,
+            'task': args.task,
+            'num_labels': num_labels,
+            'sample_rate': sample_rate
+        }, args.save_model)
+        
+        print(f'Best model saved to: {args.save_model}', file=log_file)
+        print(f'Validation metric: {valid_metric_best}', file=log_file)
+        print(f'Test metric: {test_metric}', file=log_file)
 
     if args.log_path:
         log_file.close()
