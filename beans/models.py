@@ -105,7 +105,10 @@ class BiolingualClassifier(nn.Module):
             # MLP classifier
             self.classifier = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
-                nn.ReLU(),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.GELU(),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_dim, num_classes)
             )
@@ -154,11 +157,8 @@ class AvesClassifier(nn.Module):
             for_inference=False,
         )
         
-        # Get the correct embedding dimension from the model config
         embeddings_dim = self.feature_extractor.config.get("encoder_embed_dim", 768)
-        print(f"AVES embedding dimension: {embeddings_dim}")
         
-        # Freeze the feature extractor if needed
         if freeze_feature_encoder:
             for param in self.feature_extractor.parameters():
                 param.requires_grad = False
@@ -167,7 +167,10 @@ class AvesClassifier(nn.Module):
             # MLP classifier
             self.classifier = nn.Sequential(
                 nn.Linear(embeddings_dim, hidden_dim),
-                nn.ReLU(),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.GELU(),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_dim, num_classes)
             )
@@ -233,7 +236,10 @@ class Dolph2VecClassifier(nn.Module):
             # MLP classifier
             self.classifier = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
-                nn.ReLU(),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.GELU(),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_dim, num_classes)
             )
