@@ -7,7 +7,7 @@ import sys
 import yaml
 import os
 import numpy as np
-import joblib
+import pandas as pd
 
 from sklearn import preprocessing
 from sklearn.ensemble import GradientBoostingClassifier
@@ -15,7 +15,6 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.multioutput import MultiOutputClassifier
-from sklearn.utils.class_weight import compute_class_weight
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
@@ -65,6 +64,45 @@ def read_datasets(path):
         datasets = yaml.safe_load(f)
 
     return {d['name']: d for d in datasets}
+
+
+def filter_dataset_by_class(metadata_path, exclude_class, labels):
+    """
+    Filter dataset metadata to exclude a specific class from training/validation.
+    
+    Args:
+        metadata_path (str): Path to the CSV metadata file
+        exclude_class (str): Class to exclude
+        labels (list): List of all class labels
+    
+    Returns:
+        str: Path to temporary filtered metadata file
+    """
+    # Read the original metadata
+    df = pd.read_csv(metadata_path)
+    
+    # Find the column that contains the labels
+    label_col = None
+    for col in df.columns:
+        if col in ['label', 'class', 'category'] or any(label in df[col].values for label in labels):
+            label_col = col
+            break
+    
+    if label_col is None:
+        raise ValueError(f"Could not find label column in {metadata_path}")
+    
+    # Filter out the excluded class
+    filtered_df = df[df[label_col] != exclude_class].copy()
+    
+    # Create temporary file path
+    temp_path = metadata_path.replace('.csv', f'_filtered_{exclude_class}.csv')
+    
+    # Save filtered metadata
+    filtered_df.to_csv(temp_path, index=False)
+    
+    print(f"Filtered {metadata_path}: {len(df)} -> {len(filtered_df)} samples (excluded '{exclude_class}')")
+    
+    return temp_path
 
 
 def spec2feats(spec):
@@ -215,54 +253,30 @@ def train_pytorch_model(
                 multi_label=(args.task=='detection')).to(device)
         elif args.model_type == 'biolingual':
             print(f"Creating BiolingualClassifier with {args.classifier_type} classifier", file=log_file)
-            # Compute class weights for unbalanced classes
-            labels_list = []
-            for _, y in dataloader_train:
-                labels_list.extend(y.cpu().numpy().tolist())
-            labels_array = np.array(labels_list)
-            class_weights = compute_class_weight('balanced', classes=np.arange(num_labels), y=labels_array)
-            weights = torch.tensor(class_weights, dtype=torch.float).to(device)
             model = BiolingualClassifier(
                 sample_rate=sample_rate,
                 num_classes=num_labels,
                 classifier_type=args.classifier_type,
-                freeze_feature_encoder=freeze_feature_encoder,
-                class_weights=weights).to(device)
+                freeze_feature_encoder=freeze_feature_encoder).to(device)
         elif args.model_type == 'aves':
             print(f"Creating AvesClassifier with {args.classifier_type} classifier", file=log_file)
-            # Compute class weights for unbalanced classes
-            labels_list = []
-            for _, y in dataloader_train:
-                labels_list.extend(y.cpu().numpy().tolist())
-            labels_array = np.array(labels_list)
-            class_weights = compute_class_weight('balanced', classes=np.arange(num_labels), y=labels_array)
-            weights = torch.tensor(class_weights, dtype=torch.float).to(device)
             model = AvesClassifier(
                 sample_rate=sample_rate,
                 num_classes=num_labels,
                 classifier_type=args.classifier_type,
-                freeze_feature_encoder=freeze_feature_encoder,
-                class_weights=weights).to(device)
+                freeze_feature_encoder=freeze_feature_encoder).to(device)
         elif args.model_type == 'dolph2vec':
             # Validate that dolph2vec-variant is provided when using dolph2vec
             if not args.dolph2vec_variant:
                 raise ValueError("--dolph2vec-variant must be specified when using dolph2vec model type")
             
             print(f"Creating Dolph2VecClassifier with {args.classifier_type} classifier", file=log_file)
-            # Compute class weights for unbalanced classes
-            labels_list = []
-            for _, y in dataloader_train:
-                labels_list.extend(y.cpu().numpy().tolist())
-            labels_array = np.array(labels_list)
-            class_weights = compute_class_weight('balanced', classes=np.arange(num_labels), y=labels_array)
-            weights = torch.tensor(class_weights, dtype=torch.float).to(device)
             model = Dolph2VecClassifier(
                 sample_rate=sample_rate,
                 num_classes=num_labels,
                 variant=args.dolph2vec_variant,
                 classifier_type=args.classifier_type,
-                freeze_feature_encoder=freeze_feature_encoder,
-                class_weights=weights).to(device)
+                freeze_feature_encoder=freeze_feature_encoder).to(device)
 
         optimizer = optim.Adam(params=model.parameters(), lr=lr)
 
@@ -343,10 +357,11 @@ def main():
     parser.add_argument('--train-feature-encoder', action='store_true', default=True,
                        help='Train the feature encoder (default: True)')
     parser.add_argument('--dataset', choices=datasets.keys())
+    parser.add_argument('--exclude-class', type=str, required=True,
+                       help='Class to exclude from training and validation sets')
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--stop-shuffle', action='store_true')
     parser.add_argument('--log-path', type=str)
-    parser.add_argument('--save-model', type=str, help='Path to save the best model')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     args = parser.parse_args()
 
@@ -357,8 +372,9 @@ def main():
     else:
         log_file = sys.stderr
     
-    # Log the seed used
+    # Log the seed used and excluded class
     print(f"Using seed: {args.seed}", file=log_file)
+    print(f"Excluding class: {args.exclude_class}", file=log_file)
     print(f"Using classifier type: {args.classifier_type}", file=log_file)
     
     # Determine feature encoder freezing behavior
@@ -378,30 +394,42 @@ def main():
 
     dataset = datasets[args.dataset]
     num_labels = dataset['num_labels']
+    labels = dataset['labels']
+
+    # Validate that the excluded class exists in the dataset
+    if args.exclude_class not in labels:
+        raise ValueError(f"Class '{args.exclude_class}' not found in dataset labels: {labels}")
 
     sample_rate = dataset['sample_rate'] if args.model_type != 'biolingual' else 48000
 
+    # Filter training and validation datasets to exclude the specified class
+    train_data_filtered = filter_dataset_by_class(dataset['train_data'], args.exclude_class, labels)
+    valid_data_filtered = filter_dataset_by_class(dataset['valid_data'], args.exclude_class, labels)
+    
+    # Keep original test data (including the excluded class)
+    test_data = dataset['test_data']
+
     if dataset['type'] == 'classification':
         dataset_train = ClassificationDataset(
-            metadata_path=dataset['train_data'],
+            metadata_path=train_data_filtered,
             num_labels=num_labels,
-            labels=dataset['labels'],
+            labels=labels,
             unknown_label=dataset['unknown_label'],
             sample_rate=sample_rate,
             max_duration=dataset['max_duration'],
             feature_type=feature_type)
         dataset_valid = ClassificationDataset(
-            metadata_path=dataset['valid_data'],
+            metadata_path=valid_data_filtered,
             num_labels=num_labels,
-            labels=dataset['labels'],
+            labels=labels,
             unknown_label=dataset['unknown_label'],
             sample_rate=sample_rate,
             max_duration=dataset['max_duration'],
             feature_type=feature_type)
         dataset_test = ClassificationDataset(
-            metadata_path=dataset['test_data'],
+            metadata_path=test_data,
             num_labels=num_labels,
-            labels=dataset['labels'],
+            labels=labels,
             unknown_label=dataset['unknown_label'],
             sample_rate=sample_rate,
             max_duration=dataset['max_duration'],
@@ -409,9 +437,9 @@ def main():
 
     elif dataset['type'] == 'detection':
         dataset_train = RecognitionDataset(
-            metadata_path=dataset['train_data'],
+            metadata_path=train_data_filtered,
             num_labels=num_labels,
-            labels=dataset['labels'],
+            labels=labels,
             unknown_label=dataset['unknown_label'],
             sample_rate=dataset['sample_rate'],
             max_duration=60,
@@ -419,9 +447,9 @@ def main():
             window_shift=dataset['window_shift'],
             feature_type=feature_type)
         dataset_valid = RecognitionDataset(
-            metadata_path=dataset['valid_data'],
+            metadata_path=valid_data_filtered,
             num_labels=num_labels,
-            labels=dataset['labels'],
+            labels=labels,
             unknown_label=dataset['unknown_label'],
             sample_rate=dataset['sample_rate'],
             max_duration=60,
@@ -429,9 +457,9 @@ def main():
             window_shift=dataset['window_shift'],
             feature_type=feature_type)
         dataset_test = RecognitionDataset(
-            metadata_path=dataset['test_data'],
+            metadata_path=test_data,
             num_labels=num_labels,
-            labels=dataset['labels'],
+            labels=labels,
             unknown_label=dataset['unknown_label'],
             sample_rate=dataset['sample_rate'],
             max_duration=60,
@@ -492,12 +520,6 @@ def main():
                 num_labels=num_labels,
                 metric_factory=Metric)
 
-        # Save sklearn model if requested
-        if args.save_model:
-            print(f'Saving best sklearn model to {args.save_model}', file=log_file)
-            joblib.dump(model_and_scaler, args.save_model)
-            print(f'Best sklearn model saved successfully', file=log_file)
-
     else:
         model, valid_metric_best = train_pytorch_model(
             args=args,
@@ -518,19 +540,21 @@ def main():
                 device=device,
                 desc='test')
 
-        # Save PyTorch model if requested
-        if args.save_model:
-            print(f'Saving best PyTorch model to {args.save_model}', file=log_file)
-            torch.save(model.state_dict(), args.save_model)
-            print(f'Best PyTorch model saved successfully', file=log_file)
-
     print(
         'valid_metric_best = ', valid_metric_best,
         'test_metric = ', test_metric,
         file=log_file)
 
+    # Clean up temporary files
+    try:
+        os.remove(train_data_filtered)
+        os.remove(valid_data_filtered)
+        print(f"Cleaned up temporary files", file=log_file)
+    except:
+        pass
+
     if args.log_path:
         log_file.close()
 
 if __name__ == '__main__':
-    main()
+    main() 
