@@ -1,7 +1,5 @@
 data/
-!data/dolphin_reef/
-!data/dolphin_reef/*.csv
-!data/dolphin_reef/**/*.csv
+!data/dolphin_reef/unbalanced_SW_NSW/*.csv
 logs/
 !logs/aves-bio_freeze_encoder
 !logs/biolingual
