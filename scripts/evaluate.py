@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from xgboost import XGBClassifier
 
-from beans.metrics import Accuracy, MeanAveragePrecision, BinaryF1Score, MulticlassBinaryF1Score
+from beans.metrics import Accuracy, MeanAveragePrecision, MulticlassF1Score
 from beans.models import ResNetClassifier, VGGishClassifier, BiolingualClassifier, AvesClassifier, Dolph2VecClassifier
 from beans.datasets import ClassificationDataset, RecognitionDataset
 
@@ -348,8 +348,8 @@ def main():
     parser.add_argument('--log-path', type=str)
     parser.add_argument('--save-model', type=str, help='Path to save the best model')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
-    parser.add_argument('--classification-metric', choices=['accuracy', 'f1', 'macro_f1'], default='accuracy',
-                       help='Metric to use for classification tasks (accuracy, f1 for binary, macro_f1 for multi-class)')
+    parser.add_argument('--metric', choices=['accuracy', 'f1'], default='accuracy',
+                       help='Metric to use for classification tasks (accuracy or f1)')
     args = parser.parse_args()
 
     # Set all seeds for reproducibility
@@ -362,7 +362,7 @@ def main():
     # Log the seed used
     print(f"Using seed: {args.seed}", file=log_file)
     print(f"Using classifier type: {args.classifier_type}", file=log_file)
-    print(f"Using classification metric: {args.classification_metric}", file=log_file)
+    print(f"Using metric: {args.metric}", file=log_file)
     
     # Determine feature encoder freezing behavior
     freeze_feature_encoder = args.freeze_feature_encoder and not args.train_feature_encoder
@@ -475,18 +475,10 @@ def main():
         dataloader_test = None
 
     if args.task == 'classification':
-        if args.classification_metric == 'accuracy':
+        if args.metric == 'accuracy':
             Metric = Accuracy
-        elif args.classification_metric == 'f1':
-            # For binary classification, use BinaryF1Score
-            if num_labels == 2:
-                Metric = BinaryF1Score
-            else:
-                # For multi-class, use MulticlassBinaryF1Score
-                Metric = lambda: MulticlassBinaryF1Score(num_labels)
-        elif args.classification_metric == 'macro_f1':
-            # Always use MulticlassBinaryF1Score for macro F1
-            Metric = lambda: MulticlassBinaryF1Score(num_labels)
+        elif args.metric == 'f1':
+            Metric = lambda: MulticlassF1Score(num_labels)
     elif args.task == 'detection':
         Metric = MeanAveragePrecision
 

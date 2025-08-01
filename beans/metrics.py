@@ -75,6 +75,53 @@ class MulticlassBinaryF1Score:
         return self.get_metric()['macro_f1']
 
 
+class MulticlassF1Score:
+    def __init__(self, num_classes):
+        self.num_classes = num_classes
+        self.confusion_matrix = torch.zeros(num_classes, num_classes)
+    
+    def update(self, logits, y):
+        predictions = logits.argmax(axis=1)
+        for i in range(len(predictions)):
+            pred = predictions[i].item()
+            true = y[i].item()
+            self.confusion_matrix[true, pred] += 1
+
+    def get_metric(self):
+        # Calculate precision, recall, and F1 for each class
+        precisions = []
+        recalls = []
+        f1_scores = []
+        
+        for i in range(self.num_classes):
+            tp = self.confusion_matrix[i, i]
+            fp = self.confusion_matrix[:, i].sum() - tp
+            fn = self.confusion_matrix[i, :].sum() - tp
+            
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+            
+            precisions.append(precision)
+            recalls.append(recall)
+            f1_scores.append(f1)
+        
+        # Calculate macro averages
+        macro_precision = sum(precisions) / self.num_classes
+        macro_recall = sum(recalls) / self.num_classes
+        macro_f1 = sum(f1_scores) / self.num_classes
+        
+        return {
+            'macro_precision': macro_precision,
+            'macro_recall': macro_recall,
+            'macro_f1': macro_f1,
+            'per_class_f1': f1_scores
+        }
+
+    def get_primary_metric(self):
+        return self.get_metric()['macro_f1']
+
+
 class AveragePrecision:
     """
     Taken from https://github.com/amdegroot/tnt
