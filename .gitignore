@@ -2,17 +2,13 @@ data/
 !data/dolphin_reef/
 !data/dolphin_reef/*.csv
 !data/dolphin_reef/**/*.csv
-# logs/
-logs/aves-bio_freeze_encoder
-logs/biolingual
-logs/dolph2vec
-logs/dolph2vec_freeze_encoder
-logs/dolph2vec_freeze_encoder_new_lrs
-logs/dolph2vec_new_lrs
-logs/animal_com/
-logs/few_shot/
-logs/few_shot_mlp/
-logs/test_few_shot/
+logs/
+!logs/aves-bio_freeze_encoder
+!logs/biolingual
+!logs/dolph2vec
+!logs/dolph2vec_freeze_encoder
+!logs/dolph2vec_freeze_encoder_new_lrs
+!logs/dolph2vec_new_lrs
 
 # Model files (large files that exceed GitHub's 100MB limit)
 *.pth
