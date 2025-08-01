@@ -14,6 +14,14 @@ csv = pd.read_csv(input_csv)
 print('Original class distribution:')
 print(csv['label'].value_counts())
 
+# Filter out whistles shorter than 0.8 seconds
+print(f'\nOriginal dataset size: {len(csv)} samples')
+# Calculate duration from onset and offset
+csv['duration'] = csv['offset'] - csv['onset']
+csv = csv[csv['duration'] >= 0.4]
+print(f'After filtering whistles >= 0.4s: {len(csv)} samples')
+print(f'Removed {len(pd.read_csv(input_csv)) - len(csv)} samples shorter than 0.4s')
+
 # Merge NSW_* labels into 'NSW'
 csv['label'] = csv['label'].apply(lambda x: 'NSW' if x.startswith('NSW_') else x)
 
