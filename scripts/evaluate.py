@@ -303,15 +303,26 @@ def train_pytorch_model(
                 valid_metric_best = valid_metric
                 best_model = copy.deepcopy(model)
 
+            # Convert tensors to regular values for readable logging
+            def tensor_to_value(obj):
+                if isinstance(obj, torch.Tensor):
+                    return obj.item() if obj.numel() == 1 else obj.tolist()
+                elif isinstance(obj, dict):
+                    return {k: tensor_to_value(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [tensor_to_value(v) for v in obj]
+                else:
+                    return obj
+
             print({
                 'epoch': epoch,
                 'train': {
                     'loss': (train_loss / train_steps).cpu().item(),
-                    'metric': train_metric.get_metric(),
+                    'metric': tensor_to_value(train_metric.get_metric()),
                 },
                 'valid': {
                     'loss': valid_loss,
-                    'metric': valid_metric
+                    'metric': tensor_to_value(valid_metric)
                 }
             }, file=log_file)
             log_file.flush()
