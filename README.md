@@ -1,3 +1,23 @@
+## BEANS modified repository
+
+To train dolph2vec on dolphin reef data, run from parent directory :
+```
+python scripts/evaluate.py \
+  --model-type dolph2vec \
+  --dolph2vec-variant base \
+  --classifier-type mlp \
+  --train-feature-encoder \
+  --dataset dolphin_reef_weighted \
+  --task classification \
+  --metric f1 \
+  --log-path logs/animal_com/dolph2vec \
+  --batch-size 16 \
+  --lrs "[0.0001, 0.00005, 0.00001]" \
+  --epochs 50 
+```
+
+***
+
 # BEANS: The Benchmark of Animal Sounds
 
 ![](./fig_beans.png)
